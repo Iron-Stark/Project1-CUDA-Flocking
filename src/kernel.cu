@@ -257,11 +257,15 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
 			}
 		}
 	}
-	if(n_rule1 > 0)
+	if (n_rule1 > 0) {
 		perceived_center /= n_rule1;
-	if(n_rule3 > 0)
+		velISelf = velISelf + (perceived_center - pos[iSelf])*rule1Scale;
+	}
+	if (n_rule3 > 0) {
 		perceived_velocity /= n_rule3;
-	velISelf = velISelf + (perceived_center - pos[iSelf])*rule1Scale + c*rule2Scale + perceived_velocity * rule3Scale;
+		velISelf = velISelf + perceived_velocity * rule3Scale;
+	}
+	velISelf = velISelf + c * rule2Scale;
 	
 	return velISelf;
 }
@@ -327,8 +331,18 @@ __global__ void kernComputeIndices(int N, int gridResolution,
   glm::vec3 *pos, int *indices, int *gridIndices) {
     // TODO-2.1
     // - Label each boid with the index of its grid cell.
+	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
+	if (index >= N) {
+		return;
+	}
+	glm::vec3 boidpos3D = (pos[index] - gridMin)*inverseCellWidth;
+	int gridCellIndex = gridIndex3Dto1D(boidpos3D.x, boidpos3D.y, boidpos3D.z, gridResolution);
+	gridIndices[index] = gridCellIndex;
+	
+
     // - Set up a parallel array of integer indices as pointers to the actual
     //   boid data in pos and vel1/vel2
+	indices[index] = index;
 }
 
 // LOOK-2.1 Consider how this could be useful for indicating that a cell
@@ -346,6 +360,13 @@ __global__ void kernIdentifyCellStartEnd(int N, int *particleGridIndices,
   // Identify the start point of each cell in the gridIndices array.
   // This is basically a parallel unrolling of a loop that goes
   // "this index doesn't match the one before it, must be a new cell!"
+	int index = (blockIdx.x*blockDim.x) + threadIdx.x;
+	if (index >= N) {
+		return;
+	}
+	if (index == 0) {
+		gridCellStartIndices[index] = 0;
+	}
 }
 
 __global__ void kernUpdateVelNeighborSearchScattered(
